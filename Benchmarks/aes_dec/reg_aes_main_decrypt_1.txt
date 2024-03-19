@@ -1,0 +1,4 @@
+xor_ln570_reg_2060
+temp_1_1_reg_1865
+temp_2_1_reg_1883
+statemt_r_d1

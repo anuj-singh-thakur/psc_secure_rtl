@@ -1,0 +1,1587 @@
+`timescale 1 ns / 1 ps
+
+
+module AES_Composite_enc
+(
+  Kin,
+  Din,
+  Dout,
+  Krdy,
+  Drdy,
+  Kvld,
+  Dvld,
+  EN,
+  BSY,
+  CLK,
+  RSTn
+);
+
+  input [127:0] Kin;
+  input [127:0] Din;
+  output [127:0] Dout;
+  input Krdy;
+  input Drdy;
+  output Kvld;
+  output Dvld;
+  input EN;
+  output BSY;
+  input CLK;
+  input RSTn;
+  reg [127:0] dat;reg [127:0] key;reg [127:0] rkey;
+  wire [127:0] dat_next;wire [127:0] rkey_next;
+  reg [9:0] rnd;
+  reg [7:0] rcon;
+  reg sel;
+  reg Dvld;reg Kvld;reg BSY;
+  wire rst;
+  assign rst = ~RSTn;
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) Dvld <= 0; 
+    else if(EN) Dvld <= sel; 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) Kvld <= 0; 
+    else if(EN) Kvld <= Krdy; 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) BSY <= 0; 
+    else if(EN) BSY <= Drdy | |rnd[9:1] | sel; 
+  end
+
+
+  AES_Core_dout
+  aes_core
+  (
+    .din(~dat),
+    .dout(dat_next),
+    .kin(rkey_next),
+    .sel(sel)
+  );
+
+
+  KeyExpantion
+  keyexpantion
+  (
+    .kin(rkey),
+    .kout(rkey_next),
+    .rcon(rcon)
+  );
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) rnd <= 10'b0000_0000_01; 
+    else if(EN) begin
+      if(Drdy) rnd <= { ~(~rnd[8:0]), ~(~rnd[9]) }; 
+      else if(~rnd[0]) rnd <= { ~(~rnd[8:0]), ~(~rnd[9]) }; 
+    end 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) sel <= 0; 
+    else if(EN) sel <= rnd[9]; 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) dat <= ~128'h0; 
+    else if(EN) begin
+      if(Drdy) dat <= ~Din ^ ~key; 
+      else if(~rnd[0] | sel) dat <= dat_next; 
+    end 
+  end
+
+  assign Dout = ~dat;
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) key <= ~128'h0; 
+    else if(EN) if(Krdy) key <= ~Kin; 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) rkey <= 128'h0; 
+    else if(EN) begin
+      if(Krdy) rkey <= Kin; 
+      else if(rnd[0]) rkey <= ~key; 
+      else rkey <= rkey_next;
+    end 
+  end
+
+
+  always @(posedge CLK or posedge rst) begin
+    if(rst) rcon <= 8'h01; 
+    else if(EN) begin
+      if(Drdy) rcon <= 8'h01; 
+      else if(~rnd[0]) rcon <= (rcon[7] == 1'b0)? { rcon[6:0], 1'b0 } : { rcon[6:0], 1'b0 } ^ 8'h1B; 
+    end 
+  end
+
+
+  function [7:0] xtime;
+    input [7:0] x;
+    xtime = (x[7] == 1'b0)? { x[6:0], 1'b0 } : { x[6:0], 1'b0 } ^ 8'h1B;
+  endfunction
+
+
+endmodule
+
+
+`timescale 1 ns / 1 ps
+
+
+module AES_Core_dout
+(
+  din,
+  dout,
+  kin,
+  sel
+);
+
+  input [127:0] din;input [127:0] kin;
+  input sel;
+  output [127:0] dout;
+
+  wire [31:0] pre_sb0_0;
+  wire [31:0] pre_sb0_1;
+  wire [31:0] pre_sb0_2;
+  wire [31:0] pre_sb0_3;
+  wire [31:0] pre_sb0_4;
+  wire [31:0] pre_sb0_5;
+  wire [31:0] pre_sb0_6;
+  wire [31:0] pre_sb0_7;
+
+  wire [31:0] pre_sb1_0;
+  wire [31:0] pre_sb1_1;
+  wire [31:0] pre_sb1_2;
+  wire [31:0] pre_sb1_3;
+  wire [31:0] pre_sb1_4;
+  wire [31:0] pre_sb1_5;
+  wire [31:0] pre_sb1_6;
+  wire [31:0] pre_sb1_7;
+
+  wire [31:0] pre_sb2_0;
+  wire [31:0] pre_sb2_1;
+  wire [31:0] pre_sb2_2;
+  wire [31:0] pre_sb2_3;
+  wire [31:0] pre_sb2_4;
+  wire [31:0] pre_sb2_5;
+  wire [31:0] pre_sb2_6;
+  wire [31:0] pre_sb2_7;
+
+  wire [31:0] pre_sb3_0;
+  wire [31:0] pre_sb3_1;
+  wire [31:0] pre_sb3_2;
+  wire [31:0] pre_sb3_3;
+  wire [31:0] pre_sb3_4;
+  wire [31:0] pre_sb3_5;
+  wire [31:0] pre_sb3_6;
+  wire [31:0] pre_sb3_7;
+
+  wire [31:0] st0;wire [31:0] st1;wire [31:0] st2;wire [31:0] st3;reg [31:0] sb0;reg [31:0] sb1;reg [31:0] sb2;reg [31:0] sb3;wire [31:0] sr0;wire [31:0] sr1;wire [31:0] sr2;wire [31:0] sr3;wire [31:0] sc0;wire [31:0] sc1;wire [31:0] sc2;wire [31:0] sc3;wire [31:0] sk0;wire [31:0] sk1;wire [31:0] sk2;wire [31:0] sk3;
+  assign st0 = ~din[127:96];
+  assign st1 = din[95:64];
+  assign st2 = din[63:32];
+  assign st3 = ~din[31:0];
+
+  SubBytes
+  SB0
+  (
+    ~st0,
+    pre_sb0_0
+  );
+
+  SubBytes_ny_v1
+  SB0_1
+  (
+    ~st0,
+    pre_sb0_1
+  );
+
+  SubBytes_ny_v2
+  SB0_2
+  (
+    ~st0,
+    pre_sb0_2
+  );
+
+  SubBytes_ny_v3
+  SB0_3
+  (
+    ~st0,
+    pre_sb0_3
+  );
+
+  SubBytes_ny_3
+  SB0_4
+  (
+    ~st0,
+    pre_sb0_4
+  );
+
+  SubBytes_ny
+  SB0_5
+  (
+    ~st0,
+    pre_sb0_5
+  );
+
+  SubBytes_ny_2_v1
+  SB0_6
+  (
+    ~st0,
+    pre_sb0_6
+  );
+
+  SubBytes_ny_3_v1
+  SB0_7
+  (
+    ~st0,
+    pre_sb0_7
+  );
+
+
+  always @(*) begin
+    case ({din[6],din[14],din[31]}) 
+      3'b00:  sb0 = pre_sb0_0;
+      3'b01:  sb0 = ~pre_sb0_1;
+      3'b10:  sb0 = ~pre_sb0_2;
+      3'b11:  sb0 = ~pre_sb0_3;
+      3'b100: sb0 = ~pre_sb0_4;
+      3'b101: sb0 = ~pre_sb0_5;
+      3'b110: sb0 = ~pre_sb0_6;
+      3'b111: sb0 = ~pre_sb0_7;
+    endcase
+  end
+
+  // SubBytes SB0
+  SubBytes_ny_2
+  SB1_0
+  (
+    st1,
+    pre_sb1_0
+  );
+
+  SubBytes_ny_v1
+  SB1_1
+  (
+    st1,
+    pre_sb1_1
+  );
+
+  SubBytes_ny_v2
+  SB1_2
+  (
+    st1,
+    pre_sb1_2
+  );
+
+  SubBytes_ny_v3
+  SB1_3
+  (
+    st1,
+    pre_sb1_3
+  );
+
+  SubBytes_ny_3
+  SB1_4
+  (
+    st1,
+    pre_sb1_4
+  );
+
+  SubBytes_ny
+  SB1_5
+  (
+    st1,
+    pre_sb1_5
+  );
+
+  SubBytes_ny_2_v1
+  SB1_6
+  (
+    st1,
+    pre_sb1_6
+  );
+
+  SubBytes_ny_3_v1
+  SB1_7
+  (
+    st1,
+    pre_sb1_7
+  );
+
+
+  always @(*) begin
+    case ({din[5],din[25],din[0 ]}) 
+      3'b00:  sb1 = pre_sb1_0;
+      3'b01:  sb1 = pre_sb1_1;
+      3'b10:  sb1 = pre_sb1_2;
+      3'b11:  sb1 = pre_sb1_3;
+      3'b100: sb1 = pre_sb1_4;
+      3'b101: sb1 = pre_sb1_5;
+      3'b110: sb1 = pre_sb1_6;
+      3'b111: sb1 = pre_sb1_7;
+    endcase
+  end
+
+
+  // SB2
+  SubBytes_ny
+  SB2_0
+  (
+    st2,
+    pre_sb2_0
+  );
+
+  SubBytes_ny_v1
+  SB2_1
+  (
+    st2,
+    pre_sb2_1
+  );
+
+  SubBytes_ny_v2
+  SB2_2
+  (
+    st2,
+    pre_sb2_2
+  );
+
+  SubBytes_ny_v3
+  SB2_3
+  (
+    st2,
+    pre_sb2_3
+  );
+
+  SubBytes_ny_3
+  SB2_4
+  (
+    st2,
+    pre_sb2_4
+  );
+
+  SubBytes_ny
+  SB2_5
+  (
+    st2,
+    pre_sb2_5
+  );
+
+  SubBytes_ny_2_v1
+  SB2_6
+  (
+    st2,
+    pre_sb2_6
+  );
+
+  SubBytes_ny_3_v1
+  SB2_7
+  (
+    st2,
+    pre_sb2_7
+  );
+
+  
+  always @(*) begin
+    case ({din[18],din[27],din[13]}) 
+      3'b000:  sb2 = pre_sb2_0;
+      3'b001:  sb2 = pre_sb2_1;
+      3'b010:  sb2 = pre_sb2_2;
+      3'b011:  sb2 = pre_sb2_3;
+      3'b100: sb2 = pre_sb2_4;
+      3'b101: sb2 = pre_sb2_5;
+      3'b110: sb2 = pre_sb2_6;
+      3'b111: sb2 = pre_sb2_7;
+    endcase
+  end
+
+  // SB3
+  SubBytes_ny
+  SB3_0
+  (
+    ~st3,
+    pre_sb3_0
+  );
+
+  SubBytes_ny_v1
+  SB3_1
+  (
+    ~st3,
+    pre_sb3_1
+  );
+
+  SubBytes_ny_v2
+  SB3_2
+  (
+    ~st3,
+    pre_sb3_2
+  );
+
+  SubBytes_ny_v3
+  SB3_3
+  (
+    ~st3,
+    pre_sb3_3
+  );
+
+  SubBytes_ny_3
+  SB3_4
+  (
+    ~st3,
+    pre_sb3_4
+  );
+
+  SubBytes_ny
+  SB3_5
+  (
+    ~st3,
+    pre_sb3_5
+  );
+
+  SubBytes_ny_2_v1
+  SB3_6
+  (
+    ~st3,
+    pre_sb3_6
+  );
+
+  SubBytes_ny_3_v1
+  SB3_7
+  (
+    ~st3,
+    pre_sb3_7
+  );
+
+  always @(*) begin
+    case ({din[28],din[11],din[20]}) 
+      3'b000:  sb3 = pre_sb3_0;
+      3'b001:  sb3 = pre_sb3_1;
+      3'b010:  sb3 = pre_sb3_2;
+      3'b011:  sb3 = pre_sb3_3;
+      3'b100: sb3 = pre_sb3_4;
+      3'b101: sb3 = pre_sb3_5;
+      3'b110: sb3 = pre_sb3_6;
+      3'b111: sb3 = pre_sb3_7;
+    endcase
+    // sb3 = pre_sb3_4;
+  end
+
+  assign sr0 = ~{ ~sb0[31:24], ~(~(~(~(~(~sb1[23:16]))))), ~(~(~(~(~(~sb2[15:8]))))), ~(~(~(~(~(~sb3[7:0]))))) };
+  assign sr1 = ~{ ~(~(~(~(~(~sb1[31:24]))))), ~(~(~(~(~(~sb2[23:16]))))), ~(~(~(~(~(~sb3[15:8]))))), ~sb0[7:0] };
+  assign sr2 = { ~(~sb2[31:24]), ~(~sb3[23:16]), ~sb0[15:8], ~(~sb1[7:0]) };
+  assign sr3 = { ~(~sb3[31:24]), ~sb0[23:16], ~(~sb1[15:8]), ~(~sb2[7:0]) };
+
+  MixColumns_ny
+  MC0
+  (
+    sr0,
+    sc0
+  );
+
+
+  MixColumns
+  MC1
+  (
+    sr1,
+    sc1
+  );
+
+
+  MixColumns
+  MC2
+  (
+    ~sr2,
+    sc2
+  );
+
+
+  MixColumns_ny
+  MC3
+  (
+    ~sr3,
+    sc3
+  );
+  
+  assign sk0 = (sel)? ~sr0 ^ kin[127:96] : ~(~sc0) ^ kin[127:96];
+  assign sk1 = (sel)? ~sr1 ^ kin[95:64] : ~sc1 ^ kin[95:64];
+  assign sk2 = (sel)? ~(~sr2) ^ kin[63:32] : ~sc2 ^ kin[63:32];
+  assign sk3 = (sel)? ~(~sr3) ^ kin[31:0] : ~(~sc3) ^ kin[31:0];
+  assign dout = { ~(~sk0), ~(~sk1), sk2, ~(~sk3) };
+
+endmodule
+
+
+`timescale 1 ns / 1 ps
+
+
+module MixColumns
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [7:0] a0;wire [7:0] a1;wire [7:0] a2;wire [7:0] a3;
+  wire [7:0] b0;wire [7:0] b1;wire [7:0] b2;wire [7:0] b3;
+  assign a0 = x[31:24];
+  assign a1 = ~x[23:16];
+  assign a2 = x[15:8];
+  assign a3 = ~x[7:0];
+  assign b0 = xtime(a0);
+  assign b1 = ~xtime((~a1));
+  assign b2 = ~xtime(a2);
+  assign b3 = xtime((~a3));
+  assign y[31:24] = b0 ^ ~a1 ^ ~b1 ^ a2 ^ ~a3;
+  assign y[23:16] = a0 ^ ~b1 ^ a2 ^ ~b2 ^ ~a3;
+  assign y[15:8] = a0 ^ ~a1 ^ ~b2 ^ ~a3 ^ b3;
+  assign y[7:0] = a0 ^ b0 ^ ~a1 ^ a2 ^ b3;
+
+  function [7:0] xtime;
+    input [7:0] x;
+    xtime = (x[7] == 1'b0)? { x[6:0], 1'b0 } : { x[6:0], 1'b0 } ^ 8'h1B;
+  endfunction
+
+
+endmodule
+
+
+//================================================ SubBytes
+module SubBytes_ny_2 (x, y);
+
+   //------------------------------------------------
+   input  [31:0] x;
+   output [31:0] y;
+
+   //------------------------------------------------
+   wire [31:0] 	s;
+   reg [31:0] y_reg;
+
+   //------------------------------------------------
+   GF_MULINV_8 u3 (.x(x[31:24]), .y(s[31:24]));
+   GF_MULINV_8 u2 (.x(x[23:16]), .y(s[23:16]));
+   GF_MULINV_8 u1 (.x(x[15: 8]), .y(s[15: 8]));
+   GF_MULINV_8 u0 (.x(x[ 7: 0]), .y(s[ 7: 0]));
+ 
+   // assign y = {mat_at(s[31:24]), mat_at(s[23:16]), 
+	//        mat_at(s[15: 8]), mat_at(s[ 7: 0])};
+
+
+   assign y[24+1] = ((~s[24+7] ^ s[24+6] ^ ~s[24+5] ^ s[24+1] ^ s[24+0])) ;
+   assign y[24+0] = ((s[24+7] ^ ~s[24+6] ^ s[24+5] ^ s[24+4] ^ ~s[24+0])) ;
+   assign y[24+2] = (  s[24+7] ^ s[24+6] ^ s[24+2] ^ ~s[24+1] ^ s[24+0] ) ;
+   assign y[24+3] = (  ~s[24+7] ^ s[24+3] ^ s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+4] = (  ~s[24+4] ^ s[24+3] ^ s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+5] = ((~s[24+5] ^ ~s[24+4] ^ ~s[24+3] ^ ~s[24+2] ^ s[24+1])) ;
+   assign y[24+6] = ((s[24+6] ^ ~s[24+5] ^ s[24+4] ^ s[24+3] ^ ~s[24+2])) ;
+   assign y[24+7] = (  s[24+7] ^ s[24+6] ^ ~s[24+5] ^ s[24+4] ^ s[24+3] ) ;
+
+   assign y[16+0] = (~(s[16+7] ^ ~s[16+6] ^ s[16+5] ^ s[16+4] ^ s[16+0])) ;
+   assign y[16+1] = (~(s[16+7] ^ ~s[16+6] ^ s[16+5] ^ s[16+1] ^ s[16+0])) ;
+   assign y[16+2] = (  s[16+7] ^ s[16+6] ^ s[16+2] ^ ~s[16+1] ^ s[16+0] ) ;
+   assign y[16+3] = (  s[16+7] ^ s[16+3] ^ ~s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+4] = (  s[16+4] ^ s[16+3] ^ s[16+2] ^ s[16+1] ^ ~s[16+0] ) ;
+   assign y[16+5] = (~(s[16+5] ^ ~s[16+4] ^ s[16+3] ^ s[16+2] ^ s[16+1])) ;
+   assign y[16+6] = (~(s[16+6] ^ s[16+5] ^ ~s[16+4] ^ s[16+3] ^ s[16+2])) ; 
+   assign y[16+7] = (  s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+4] ^ ~s[16+3] ) ;
+
+   assign y[8+0] = (~(s[8+7] ^ s[8+6] ^ ~s[8+5] ^ s[8+4] ^ s[8+0]) )      ;
+   assign y[8+1] = ~(~(s[8+7] ^ s[8+6] ^ s[8+5] ^ s[8+1] ^ s[8+0]) )      ;
+   assign y[8+2] = ~(  s[8+7] ^ s[8+6] ^ s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+3] = (  ~s[8+7] ^ s[8+3] ^ s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+4] = (  s[8+4] ^ s[8+3] ^ ~s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+5] = (~(s[8+5] ^ s[8+4] ^ ~s[8+3] ^ s[8+2] ^ s[8+1]) )      ;
+   assign y[8+6] = (~(s[8+6] ^ s[8+5] ^ ~s[8+4] ^ s[8+3] ^ s[8+2]) )      ;
+   assign y[8+7] = (  s[8+7] ^ s[8+6] ^ ~s[8+5] ^ s[8+4] ^ s[8+3]  )      ;
+
+   assign y[0+0] = (~(s[0+7] ^ s[0+6] ^ ~s[0+5] ^ s[0+4] ^ s[0+0]))    ;
+   assign y[0+1] = (~(s[0+7] ^ s[0+6] ^ ~s[0+5] ^ s[0+1] ^ s[0+0]))   ;
+   assign y[0+2] = (  s[0+7] ^ ~s[0+6] ^ s[0+2] ^ s[0+1] ^ s[0+0] )   ;
+   assign y[0+3] = (  s[0+7] ^ ~s[0+3] ^ s[0+2] ^ s[0+1] ^ s[0+0] )  ;
+   assign y[0+4] = (  s[0+4] ^ s[0+3] ^ s[0+2] ^ ~s[0+1] ^ s[0+0] )  ;
+   assign y[0+5] = (~(s[0+5] ^ s[0+4] ^ ~s[0+3] ^ s[0+2] ^ s[0+1]))   ;
+   assign y[0+6] = (~(s[0+6] ^ ~s[0+5] ^ s[0+4] ^ s[0+3] ^ s[0+2]))  ;
+   assign y[0+7] = (  s[0+7] ^ ~s[0+6] ^ s[0+5] ^ s[0+4] ^ s[0+3] )  ;
+    
+   //------------------------------------------------ Affine matrix
+   // function [7:0] mat_at;
+   //    input [7:0] x;
+   //    begin
+	//  mat_at[0] = ~(x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[0]);
+	//  mat_at[1] = ~(x[7] ^ x[6] ^ x[5] ^ x[1] ^ x[0]);
+	//  mat_at[2] =   x[7] ^ x[6] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[3] =   x[7] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[4] =   x[4] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[5] = ~(x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1]);
+	//  mat_at[6] = ~(x[6] ^ x[5] ^ x[4] ^ x[3] ^ x[2]);
+	//  mat_at[7] =   x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[3];
+   //    end
+   // endfunction
+endmodule // SubBytes
+
+
+
+module GF_MULINV_8 (x, y);
+
+   //------------------------------------------------
+   input  [7:0] x;
+   output [7:0] y;
+   
+   //------------------------------------------------
+   wire [7:0] 	xt, yt;
+   wire [3:0] 	g1, g0, g1_g0, p, pi;
+   
+   //------------------------------------------------
+   // GF(2^8) -> GF(2^2^2) transform
+   assign xt = mat_x(x);
+
+   // Multipricative inversion in GF(2^2^2)
+   assign {g1, g0} = xt;
+   assign g1_g0    = g1 ^ g0;
+
+   assign p = gf_mul4_lambda(gf_sq4(g1)) ^ gf_mul4(g1_g0, g0);
+   GF_MULINV_4 u0 (p, pi);
+   
+   assign yt[7:4]  = gf_mul4(g1, pi);
+   assign yt[3:0]  = gf_mul4(g1_g0, pi);
+   
+   // GF(2^2^2) -> GF(2^8) inverse transform
+   assign y = mat_xi(yt);
+	     
+   //------------------------------------------------ 
+   // Isomorphism matrix (lambda = 4'b1100, phi = 2'b10)
+   function [7:0] mat_x;
+      input [7:0] x;
+      begin
+	 mat_x[7] =  x[7]        ^ x[5];
+	 mat_x[6] =  x[7] ^ x[6]        ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[5] =  x[7]        ^ x[5]        ^ x[3] ^ x[2];
+	 mat_x[4] =  x[7]        ^ x[5]        ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[3] =  x[7] ^ x[6]                      ^ x[2] ^ x[1];
+	 mat_x[2] =  x[7]               ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[1] =         x[6]        ^ x[4]               ^ x[1];
+	 mat_x[0] =         x[6]                             ^ x[1] ^ x[0];
+      end
+   endfunction
+      
+   function [7:0] mat_xi;
+      input [7:0] x;
+      begin
+	 mat_xi[7] =  x[7] ^ x[6] ^ x[5]                      ^ x[1];
+	 mat_xi[6] =         x[6]                      ^ x[2];
+	 mat_xi[5] =         x[6] ^ x[5]                      ^ x[1];
+	 mat_xi[4] =         x[6] ^ x[5] ^ x[4]        ^ x[2] ^ x[1];
+	 mat_xi[3] =                x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_xi[2] =  x[7]               ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_xi[1] =                x[5] ^ x[4];
+	 mat_xi[0] =         x[6] ^ x[5] ^ x[4]        ^ x[2]        ^ x[0];
+      end
+   endfunction
+   
+   //------------------------------------------------ Square 
+   function [3:0] gf_sq4;
+      input [3:0] x;
+      begin
+	 gf_sq4[0] = x[3] ^ x[1] ^ x[0];
+	 gf_sq4[1] = x[2] ^ x[1];
+	 gf_sq4[2] = x[3] ^ x[2];
+	 gf_sq4[3] = x[3];      
+      end
+   endfunction // gf_sq4
+
+   //------------------------------------------------ Multiply
+   function [3:0] gf_mul4;
+      input [3:0] x, y;
+      begin
+	 gf_mul4[3] = x[3]&y[3] ^ x[3]&y[1] ^ x[1]&y[3] ^ 
+		      x[2]&y[3] ^ x[2]&y[1] ^ x[0]&y[3] ^
+		      x[3]&y[2] ^ x[3]&y[0] ^ x[1]&y[2];
+	 
+	 gf_mul4[2] = x[3]&y[3] ^ x[3]&y[1] ^ x[1]&y[3] ^
+		      x[2]&y[2] ^ x[2]&y[0] ^ x[0]&y[2];
+	 
+	 gf_mul4[1] = x[2]&y[3] ^ x[3]&y[2] ^ x[2]&y[2]^
+		      x[1]&y[1] ^ x[0]&y[1] ^ x[1]&y[0];
+	 
+	 gf_mul4[0] = x[3]&y[3] ^ x[2]&y[3] ^ x[3]&y[2]^
+		      x[1]&y[1] ^ x[0]&y[0];   
+      end
+   endfunction
+
+   // lambda = 4'b1100
+   function [3:0] gf_mul4_lambda;
+      input [3:0] x;
+      begin
+	 gf_mul4_lambda[3] = x[2] ^ x[0];
+	 gf_mul4_lambda[2] = x[3] ^ x[2] ^ x[1] ^ x[0];
+	 gf_mul4_lambda[1] = x[3];
+	 gf_mul4_lambda[0] = x[2];
+      end
+   endfunction
+
+endmodule // GF_MULINV_8
+
+module GF_MULINV_4 (x, y);
+
+   //------------------------------------------------
+   input  [3:0] x;
+   output [3:0] y;
+   
+   //------------------------------------------------
+   wire [1:0] 	g1, g0, g1_g0, p, pi;
+
+   
+   //------------------------------------------------
+   // Multipricative inversion in GF(2^2)
+   assign {g1, g0} = x;
+   assign g1_g0    = g1 ^ g0;
+
+   assign p        = gf_mul2_phi(gf_sq2(g1)) ^ gf_mul2(g1_g0, g0);
+   assign pi       = gf_inv2(p);
+
+   assign y[3:2]   = gf_mul2(g1, pi);
+   assign y[1:0]   = gf_mul2(g1_g0, pi);
+   
+   //------------------------------------------------ Square
+   function [1:0] gf_sq2;
+      input [1:0] x;
+      begin
+	 gf_sq2[1] = x[1];
+	 gf_sq2[0] = x[1] ^ x[0];
+      end
+   endfunction // case
+
+   //------------------------------------------------ Multiply
+   function [1:0] gf_mul2;
+      input [1:0] x, y;
+      begin
+	 gf_mul2[1] = x[1]&y[1] ^ x[0]&y[1] ^ x[1]&y[0];
+	 gf_mul2[0] = x[1]&y[1] ^ x[0]&y[0];
+      end
+   endfunction // case
+
+   // phi = 2'b10
+   function [1:0] gf_mul2_phi;
+      input [1:0] x;
+      begin
+	 gf_mul2_phi[1] = x[1] ^ x[0];
+	 gf_mul2_phi[0] = x[1];
+      end
+   endfunction // case
+
+   //------------------------------------------------ Multiplicative inversion
+   function [1:0] gf_inv2;
+      input [1:0] x;
+      begin
+	 gf_inv2[1] = x[1];
+	 gf_inv2[0] = x[1] ^ x[0];
+      end
+   endfunction // case
+      
+endmodule // GF_MULINV4
+//================================================ KeyExpantion
+module KeyExpantion (kin, kout, rcon);
+
+   //------------------------------------------------
+   input [127:0]  kin;
+   output [127:0] kout;
+   input [7:0] 	  rcon;
+
+   //------------------------------------------------
+   wire [31:0]    ws, wr, w0, w1, w2, w3;
+   //------------------------------------------------
+   SubBytes SB0 ({kin[23:16], kin[15:8], kin[7:0], kin[31:24]}, ws);
+   assign wr = {(ws[31:24] ^ rcon), ws[23:0]};
+
+   assign w0 = wr ^ kin[127:96];
+   assign w1 = w0 ^ kin[95:64];
+   assign w2 = w1 ^ kin[63:32];
+   assign w3 = w2 ^ kin[31:0];
+
+   assign kout = {w0, w1, w2, w3};
+
+endmodule // KeyExpantion
+
+
+//================================================ SubBytes
+module SubBytes_ny_3 (x, y);
+
+   //------------------------------------------------
+   input  [31:0] x;
+   output [31:0] y;
+
+   //------------------------------------------------
+   wire [31:0] 	s;
+
+   //------------------------------------------------
+   GF_MULINV_8 u3 (.x(x[31:24]), .y(s[31:24]));
+   GF_MULINV_8 u2 (.x(x[23:16]), .y(s[23:16]));
+   GF_MULINV_8 u1 (.x(x[15: 8]), .y(s[15: 8]));
+   GF_MULINV_8 u0 (.x(x[ 7: 0]), .y(s[ 7: 0]));
+ 
+   // assign y = {mat_at(s[31:24]), mat_at(s[23:16]), 
+	//        mat_at(s[15: 8]), mat_at(s[ 7: 0])};
+
+
+
+   assign y[24+1] = ((s[24+7] ^ ~s[24+6] ^ ~s[24+5] ^ s[24+1] ^ s[24+0])) ;
+   assign y[24+0] = ((s[24+7] ^ s[24+6] ^ s[24+5] ^ ~s[24+4] ^ ~s[24+0])) ;
+   assign y[24+2] = (  ~s[24+7] ^ s[24+6] ^ ~s[24+2] ^ ~s[24+1] ^ s[24+0] ) ;
+   assign y[24+3] = (  s[24+7] ^ ~s[24+3] ^ s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+4] = (  s[24+4] ^ s[24+3] ^ ~s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+5] = ((s[24+5] ^ s[24+4] ^ ~s[24+3] ^ ~s[24+2] ^ s[24+1])) ;
+   assign y[24+6] = ((s[24+6] ^ ~s[24+5] ^ s[24+4] ^ s[24+3] ^ ~s[24+2])) ;
+   assign y[24+7] = (  ~s[24+7] ^ s[24+6] ^ s[24+5] ^ s[24+4] ^ s[24+3] ) ;
+
+   assign y[16+0] = (~(s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+4] ^ ~s[16+0])) ;
+   assign y[16+1] = (~(s[16+7] ^ s[16+6] ^ s[16+5] ^ ~s[16+1] ^ s[16+0])) ;
+   assign y[16+2] = (  s[16+7] ^ s[16+6] ^ ~s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+3] = (  ~s[16+7] ^ s[16+3] ^ s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+4] = (  s[16+4] ^ s[16+3] ^ ~s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+5] = (~(s[16+5] ^ s[16+4] ^ s[16+3] ^ s[16+2] ^ ~s[16+1])) ;
+   assign y[16+6] = (~(s[16+6] ^ s[16+5] ^ s[16+4] ^ ~s[16+3] ^ s[16+2])) ; 
+   assign y[16+7] = (  ~s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+4] ^ s[16+3] ) ;
+
+   assign y[8+0] = (~(~(s[8+7] ^ s[8+6] ^ s[8+5] ^ ~s[8+4] ^ ~s[8+0])) )      ;
+   assign y[8+1] = ((s[8+7] ^ s[8+6] ^ ~s[8+5] ^ s[8+1] ^ ~s[8+0]) )      ;
+   assign y[8+2] = (  ~s[8+7] ^ s[8+6] ^ s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+3] = (  s[8+7] ^ s[8+3] ^ ~s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+4] = (  s[8+4] ^ s[8+3] ^ s[8+2] ^ s[8+1] ^ ~s[8+0]  )      ;
+   assign y[8+5] = ((s[8+5] ^ ~s[8+4] ^ s[8+3] ^ ~s[8+2] ^ s[8+1]) )      ;
+   assign y[8+6] = ((s[8+6] ^ ~s[8+5] ^ s[8+4] ^ s[8+3] ^ ~s[8+2]) )      ;
+   assign y[8+7] = (  s[8+7] ^ s[8+6] ^ ~s[8+5] ^ s[8+4] ^ s[8+3]  )      ;
+
+   assign y[0+0] = ((s[0+7] ^ s[0+6] ^ ~s[0+5] ^ ~s[0+4] ^ s[0+0]))    ;
+   assign y[0+1] = ((s[0+7] ^ s[0+6] ^ s[0+5] ^ ~s[0+1] ^ ~s[0+0]))   ;
+   assign y[0+2] = (  s[0+7] ^ s[0+6] ^ ~s[0+2] ^ s[0+1] ^ s[0+0] )   ;
+   assign y[0+3] = (  s[0+7] ^ ~s[0+3] ^ s[0+2] ^ s[0+1] ^ s[0+0] )  ;
+   assign y[0+4] = (  s[0+4] ^ s[0+3] ^ s[0+2] ^ s[0+1] ^ ~s[0+0] )  ;
+   assign y[0+5] = ((s[0+5] ^ ~s[0+4] ^ s[0+3] ^ ~s[0+2] ^ s[0+1]))   ;
+   assign y[0+6] = ((s[0+6] ^ s[0+5] ^ ~s[0+4] ^ s[0+3] ^ ~s[0+2]))  ;
+   assign y[0+7] = (  s[0+7] ^ s[0+6] ^ ~s[0+5] ^ s[0+4] ^ s[0+3] )  ;
+    
+   //------------------------------------------------ Affine matrix
+   // function [7:0] mat_at;
+   //    input [7:0] x;
+   //    begin
+	//  mat_at[0] = ~(x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[0]);
+	//  mat_at[1] = ~(x[7] ^ x[6] ^ x[5] ^ x[1] ^ x[0]);
+	//  mat_at[2] =   x[7] ^ x[6] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[3] =   x[7] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[4] =   x[4] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[5] = ~(x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1]);
+	//  mat_at[6] = ~(x[6] ^ x[5] ^ x[4] ^ x[3] ^ x[2]);
+	//  mat_at[7] =   x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[3];
+   //    end
+   // endfunction
+endmodule // SubBytes
+
+
+
+//================================================ SubBytes
+module SubBytes (x, y);
+
+   //------------------------------------------------
+   input  [31:0] x;
+   output [31:0] y;
+
+   //------------------------------------------------
+   wire [31:0] 	s;
+
+   //------------------------------------------------
+   GF_MULINV_8 u3 (.x(x[31:24]), .y(s[31:24]));
+   GF_MULINV_8 u2 (.x(x[23:16]), .y(s[23:16]));
+   GF_MULINV_8 u1 (.x(x[15: 8]), .y(s[15: 8]));
+   GF_MULINV_8 u0 (.x(x[ 7: 0]), .y(s[ 7: 0]));
+ 
+   // assign y = {mat_at(s[31:24]), mat_at(s[23:16]), 
+	//        mat_at(s[15: 8]), mat_at(s[ 7: 0])};
+
+   assign y[24+0] = ~(s[24+7] ^ s[24+6] ^ s[24+5] ^ s[24+4] ^ s[24+0]);
+   assign y[24+1] = ~(s[24+7] ^ s[24+6] ^ s[24+5] ^ s[24+1] ^ s[24+0]);
+   assign y[24+2] =   s[24+7] ^ s[24+6] ^ s[24+2] ^ s[24+1] ^ s[24+0];
+   assign y[24+3] =   s[24+7] ^ s[24+3] ^ s[24+2] ^ s[24+1] ^ s[24+0];
+   assign y[24+4] =   s[24+4] ^ s[24+3] ^ s[24+2] ^ s[24+1] ^ s[24+0];
+   assign y[24+5] = ~(s[24+5] ^ s[24+4] ^ s[24+3] ^ s[24+2] ^ s[24+1]);
+   assign y[24+6] = ~(s[24+6] ^ s[24+5] ^ s[24+4] ^ s[24+3] ^ s[24+2]);
+   assign y[24+7] =   s[24+7] ^ s[24+6] ^ s[24+5] ^ s[24+4] ^ s[24+3];
+
+   assign y[16+0] = ~(s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+4] ^ s[16+0]);
+   assign y[16+1] = ~(s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+1] ^ s[16+0]);
+   assign y[16+2] =   s[16+7] ^ s[16+6] ^ s[16+2] ^ s[16+1] ^ s[16+0];
+   assign y[16+3] =   s[16+7] ^ s[16+3] ^ s[16+2] ^ s[16+1] ^ s[16+0];
+   assign y[16+4] =   s[16+4] ^ s[16+3] ^ s[16+2] ^ s[16+1] ^ s[16+0];
+   assign y[16+5] = ~(s[16+5] ^ s[16+4] ^ s[16+3] ^ s[16+2] ^ s[16+1]);
+   assign y[16+6] = ~(s[16+6] ^ s[16+5] ^ s[16+4] ^ s[16+3] ^ s[16+2]);
+   assign y[16+7] =   s[16+7] ^ s[16+6] ^ s[16+5] ^ s[16+4] ^ s[16+3];
+
+   assign y[8+0] = ~(s[8+7] ^ s[8+6] ^ s[8+5] ^ s[8+4] ^ s[8+0]);
+   assign y[8+1] = ~(s[8+7] ^ s[8+6] ^ s[8+5] ^ s[8+1] ^ s[8+0]);
+   assign y[8+2] =   s[8+7] ^ s[8+6] ^ s[8+2] ^ s[8+1] ^ s[8+0];
+   assign y[8+3] =   s[8+7] ^ s[8+3] ^ s[8+2] ^ s[8+1] ^ s[8+0];
+   assign y[8+4] =   s[8+4] ^ s[8+3] ^ s[8+2] ^ s[8+1] ^ s[8+0];
+   assign y[8+5] = ~(s[8+5] ^ s[8+4] ^ s[8+3] ^ s[8+2] ^ s[8+1]);
+   assign y[8+6] = ~(s[8+6] ^ s[8+5] ^ s[8+4] ^ s[8+3] ^ s[8+2]);
+   assign y[8+7] =   s[8+7] ^ s[8+6] ^ s[8+5] ^ s[8+4] ^ s[8+3];
+
+   assign y[0+0] = ~(s[0+7] ^ s[0+6] ^ s[0+5] ^ s[0+4] ^ s[0+0]);
+   assign y[0+1] = ~(s[0+7] ^ s[0+6] ^ s[0+5] ^ s[0+1] ^ s[0+0]);
+   assign y[0+2] =   s[0+7] ^ s[0+6] ^ s[0+2] ^ s[0+1] ^ s[0+0];
+   assign y[0+3] =   s[0+7] ^ s[0+3] ^ s[0+2] ^ s[0+1] ^ s[0+0];
+   assign y[0+4] =   s[0+4] ^ s[0+3] ^ s[0+2] ^ s[0+1] ^ s[0+0];
+   assign y[0+5] = ~(s[0+5] ^ s[0+4] ^ s[0+3] ^ s[0+2] ^ s[0+1]);
+   assign y[0+6] = ~(s[0+6] ^ s[0+5] ^ s[0+4] ^ s[0+3] ^ s[0+2]);
+   assign y[0+7] =   s[0+7] ^ s[0+6] ^ s[0+5] ^ s[0+4] ^ s[0+3];
+    
+   //------------------------------------------------ Affine matrix
+   // function [7:0] mat_at;
+   //    input [7:0] x;
+   //    begin
+	//  mat_at[0] = ~(x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[0]);
+	//  mat_at[1] = ~(x[7] ^ x[6] ^ x[5] ^ x[1] ^ x[0]);
+	//  mat_at[2] =   x[7] ^ x[6] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[3] =   x[7] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[4] =   x[4] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[5] = ~(x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1]);
+	//  mat_at[6] = ~(x[6] ^ x[5] ^ x[4] ^ x[3] ^ x[2]);
+	//  mat_at[7] =   x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[3];
+   //    end
+   // endfunction
+endmodule // SubBytes
+
+
+
+
+
+module SubBytes_ny_v1
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [31:0] s;
+  reg [31:0] y_reg;
+
+  GF_MULINV_8
+  u3
+  (
+    .x(x[31:24]),
+    .y(s[31:24])
+  );
+
+
+  GF_MULINV_8
+  u2
+  (
+    .x(x[23:16]),
+    .y(s[23:16])
+  );
+
+
+  GF_MULINV_8
+  u1
+  (
+    .x(x[15:8]),
+    .y(s[15:8])
+  );
+
+
+  GF_MULINV_8
+  u0
+  (
+    .x(x[7:0]),
+    .y(s[7:0])
+  );
+
+
+  always @(posedge x) begin
+    y_reg = y;
+  end
+
+  assign y[24 + 1] = ~(~((s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ s[24 + 1]) & ~s[24 + 0] | ~((s[24 + 7] ^ s[24 + 6] ^ s[24 + 5]) & ~s[24 + 1] | ~(s[24 + 7] ^ s[24 + 6] ^ s[24 + 5]) & s[24 + 1]) & s[24 + 0]));
+  assign y[24 + 0] = ~(~(((s[24 + 7] ^ s[24 + 6] ^ s[24 + 5]) & ~s[24 + 4] | ~(s[24 + 7] ^ s[24 + 6] ^ s[24 + 5]) & s[24 + 4]) & ~s[24 + 0] | ~(s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & s[24 + 0]));
+  assign y[24 + 2] = ~((s[24 + 7] ^ s[24 + 6] ^ s[24 + 2] ^ s[24 + 1]) & ~s[24 + 0] | ~(s[24 + 7] ^ s[24 + 6] ^ s[24 + 2] ^ s[24 + 1]) & s[24 + 0]);
+  assign y[24 + 3] = ~((s[24 + 7] ^ s[24 + 3] ^ s[24 + 2] ^ s[24 + 1]) & ~s[24 + 0] | ~(s[24 + 7] ^ s[24 + 3] ^ s[24 + 2] ^ s[24 + 1]) & s[24 + 0]);
+  assign y[24 + 4] = ~((s[24 + 4] ^ s[24 + 3] ^ s[24 + 2] ^ s[24 + 1]) & ~s[24 + 0] | ~((s[24 + 4] ^ s[24 + 3] ^ s[24 + 2]) & ~s[24 + 1] | ~(s[24 + 4] ^ s[24 + 3] ^ s[24 + 2]) & s[24 + 1]) & s[24 + 0]);
+  assign y[24 + 5] = ~(~(((s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & ~s[24 + 2] | ~(s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & s[24 + 2]) & ~s[24 + 1] | ~((s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & ~s[24 + 2] | ~(s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & s[24 + 2]) & s[24 + 1]));
+  assign y[24 + 6] = ~(~(((s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & ~s[24 + 3] | ~(s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & s[24 + 3]) & ~s[24 + 2] | ~(s[24 + 6] ^ s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & s[24 + 2]));
+  assign y[24 + 7] = ~((s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & ~s[24 + 3] | ~(s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & s[24 + 3]);
+  assign y[16 + 0] = ~(~((s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 4]) & ~s[16 + 0] | ~((s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & ~s[16 + 4] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & s[16 + 4]) & s[16 + 0]));
+  assign y[16 + 1] = ~(~(((s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & ~s[16 + 1] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & s[16 + 1]) & ~s[16 + 0] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 1]) & s[16 + 0]));
+  assign y[16 + 2] = ~((s[16 + 7] ^ s[16 + 6] ^ s[16 + 2] ^ s[16 + 1]) & ~s[16 + 0] | ~((s[16 + 7] ^ s[16 + 6] ^ s[16 + 2]) & ~s[16 + 1] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 2]) & s[16 + 1]) & s[16 + 0]);
+  assign y[16 + 3] = ~((s[16 + 7] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1]) & ~s[16 + 0] | ~(s[16 + 7] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1]) & s[16 + 0]);
+  assign y[16 + 4] = ~((s[16 + 4] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1]) & ~s[16 + 0] | ~(s[16 + 4] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1]) & s[16 + 0]);
+  assign y[16 + 5] = ~(~((s[16 + 5] ^ s[16 + 4] ^ s[16 + 3] ^ s[16 + 2]) & ~s[16 + 1] | ~(s[16 + 5] ^ s[16 + 4] ^ s[16 + 3] ^ s[16 + 2]) & s[16 + 1]));
+  assign y[16 + 6] = ~(~((s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] ^ s[16 + 3]) & ~s[16 + 2] | ~(s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] ^ s[16 + 3]) & s[16 + 2]));
+  assign y[16 + 7] = ~(((s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & ~s[16 + 4] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 5]) & s[16 + 4]) & ~s[16 + 3] | ~(s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 4]) & s[16 + 3]);
+  assign y[8 + 0] = ~(~((s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 4]) & ~s[8 + 0] | ~(s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 4]) & s[8 + 0]));
+  assign y[8 + 1] = ~(~(s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 1] ^ s[8 + 0]));
+  assign y[8 + 2] = ~((s[8 + 7] ^ s[8 + 6] ^ s[8 + 2] ^ s[8 + 1]) & ~s[8 + 0] | ~((s[8 + 7] ^ s[8 + 6] ^ s[8 + 2]) & ~s[8 + 1] | ~(s[8 + 7] ^ s[8 + 6] ^ s[8 + 2]) & s[8 + 1]) & s[8 + 0]);
+  assign y[8 + 3] = ~(((s[8 + 7] ^ s[8 + 3] ^ s[8 + 2]) & ~s[8 + 1] | ~(s[8 + 7] ^ s[8 + 3] ^ s[8 + 2]) & s[8 + 1]) & ~s[8 + 0] | ~(s[8 + 7] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1]) & s[8 + 0]);
+  assign y[8 + 4] = ~((s[8 + 4] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1]) & ~s[8 + 0] | ~((s[8 + 4] ^ s[8 + 3] ^ s[8 + 2]) & ~s[8 + 1] | ~(s[8 + 4] ^ s[8 + 3] ^ s[8 + 2]) & s[8 + 1]) & s[8 + 0]);
+  assign y[8 + 5] = ~(~(s[8 + 5] ^ s[8 + 4] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1]));
+  assign y[8 + 6] = ~(~((s[8 + 6] ^ s[8 + 5] ^ s[8 + 4] ^ s[8 + 3]) & ~s[8 + 2] | ~((s[8 + 6] ^ s[8 + 5] ^ s[8 + 4]) & ~s[8 + 3] | ~(s[8 + 6] ^ s[8 + 5] ^ s[8 + 4]) & s[8 + 3]) & s[8 + 2]));
+  assign y[8 + 7] = ~(((s[8 + 7] ^ s[8 + 6] ^ s[8 + 5]) & ~s[8 + 4] | ~(s[8 + 7] ^ s[8 + 6] ^ s[8 + 5]) & s[8 + 4]) & ~s[8 + 3] | ~(s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 4]) & s[8 + 3]);
+  assign y[0 + 0] = ~(~(((s[0 + 7] ^ s[0 + 6] ^ s[0 + 5]) & ~s[0 + 4] | ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 5]) & s[0 + 4]) & ~s[0 + 0] | ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4]) & s[0 + 0]));
+  assign y[0 + 1] = ~(~(((s[0 + 7] ^ s[0 + 6] ^ s[0 + 5]) & ~s[0 + 1] | ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 5]) & s[0 + 1]) & ~s[0 + 0] | ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 1]) & s[0 + 0]));
+  assign y[0 + 2] = ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 2] ^ s[0 + 1] ^ s[0 + 0]);
+  assign y[0 + 3] = ~(((s[0 + 7] ^ s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1] | ~(s[0 + 7] ^ s[0 + 3] ^ s[0 + 2]) & s[0 + 1]) & ~s[0 + 0] | ~((s[0 + 7] ^ s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1] | ~(s[0 + 7] ^ s[0 + 3] ^ s[0 + 2]) & s[0 + 1]) & s[0 + 0]);
+  assign y[0 + 4] = ~((s[0 + 4] ^ s[0 + 3] ^ s[0 + 2] ^ s[0 + 1]) & ~s[0 + 0] | ~((s[0 + 4] ^ s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1] | ~(s[0 + 4] ^ s[0 + 3] ^ s[0 + 2]) & s[0 + 1]) & s[0 + 0]);
+  assign y[0 + 5] = ~(~((s[0 + 5] ^ s[0 + 4] ^ s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1] | ~(s[0 + 5] ^ s[0 + 4] ^ s[0 + 3] ^ s[0 + 2]) & s[0 + 1]));
+  assign y[0 + 6] = ~(~((s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ s[0 + 3]) & ~s[0 + 2] | ~(s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ s[0 + 3]) & s[0 + 2]));
+  assign y[0 + 7] = ~(s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ s[0 + 3]);
+
+endmodule
+
+
+//================================================ MixColumns
+module MixColumns_ny(x, y);
+
+   //------------------------------------------------
+   input  [31:0]  x;
+   output [31:0]  y;
+
+   //------------------------------------------------
+   wire [7:0]    a0, a1, a2, a3;
+   wire [7:0]    b0, b1, b2, b3;
+
+   assign a0 = x[31:24];
+   assign a1 = x[23:16];
+   assign a2 = x[15: 8];
+   assign a3 = x[ 7: 0];
+
+   assign b0 = (a0[7]==1'b0)? {a0[6:0],1'b0} : {a0[6:0],1'b0} ^ 8'h1B; // b0 = xtime(a0);
+   assign b1 = (a1[7]==1'b0)? {a1[6:0],1'b0} : {a1[6:0],1'b0} ^ 8'h1B; //b1 = xtime(a1);
+   assign b2 = (a2[7]==1'b0)? {a2[6:0],1'b0} : {a2[6:0],1'b0} ^ 8'h1B;  //b2 = xtime(a2);
+   assign b3 = (a3[7]==1'b0)? {a3[6:0],1'b0} : {a3[6:0],1'b0} ^ 8'h1B;  //b3 = xtime(a3);
+
+   assign y[31:24] =   ~( b0 ^ a1^b1 ^ a2    ^ a3);
+   assign y[23:16] = ~(a0        ^b1 ^ a2^b2 ^ a3);
+   assign y[15: 8] = ~(a0    ^ a1        ^b2 ^ a3^b3);
+   assign y[ 7: 0] = ~(a0^b0 ^ a1    ^ a2        ^b3);
+  
+   // function [7:0] xtime;
+   //    input [7:0] x;
+   //    xtime = (x[7]==1'b0)? {x[6:0],1'b0} : {x[6:0],1'b0} ^ 8'h1B;
+   // endfunction
+   
+endmodule // MixColumns
+
+//================================================ SubBytes
+module SubBytes_ny (x, y);
+
+   //------------------------------------------------
+   input  [31:0] x;
+   output [31:0] y;
+
+   //------------------------------------------------
+   wire [31:0] 	s;
+
+   //------------------------------------------------
+   GF_MULINV_8 u3 (.x(x[31:24]), .y(s[31:24]));
+   GF_MULINV_8 u2 (.x(x[23:16]), .y(s[23:16]));
+   GF_MULINV_8 u1 (.x(x[15: 8]), .y(s[15: 8]));
+   GF_MULINV_8 u0 (.x(x[ 7: 0]), .y(s[ 7: 0]));
+ 
+   // assign y = {mat_at(s[31:24]), mat_at(s[23:16]), 
+	//        mat_at(s[15: 8]), mat_at(s[ 7: 0])};
+
+
+
+   assign y[24+1] = ((s[24+7] ^ ~s[24+6] ^ s[24+5] ^ ~s[24+1] ^ s[24+0])) ;
+   assign y[24+0] = ~((s[24+7] ^ s[24+6] ^ ~s[24+5] ^ s[24+4] ^ s[24+0])) ;
+   assign y[24+2] = (  ~s[24+7] ^ s[24+6] ^ s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+3] = (  s[24+7] ^ s[24+3] ^ ~s[24+2] ^ s[24+1] ^ s[24+0] ) ;
+   assign y[24+4] = (  s[24+4] ^ s[24+3] ^ s[24+2] ^ ~s[24+1] ^ s[24+0] ) ;
+   assign y[24+5] = ((s[24+5] ^ s[24+4] ^ s[24+3] ^ s[24+2] ^ s[24+1])) ;
+   assign y[24+6] = ((s[24+6] ^ ~s[24+5] ^ ~s[24+4] ^ s[24+3] ^ s[24+2])) ;
+   assign y[24+7] = (  s[24+7] ^ s[24+6] ^ s[24+5] ^ s[24+4] ^ ~s[24+3] ) ;
+
+   assign y[16+0] = ((~s[16+7] ^ ~s[16+6] ^ ~s[16+5] ^ s[16+4] ^ ~s[16+0])) ;
+   assign y[16+1] = ((s[16+7] ^ ~s[16+6] ^ ~s[16+5] ^ s[16+1] ^ s[16+0])) ;
+   assign y[16+2] = (  s[16+7] ^ ~s[16+6] ^ ~s[16+2] ^ s[16+1] ^ ~s[16+0] ) ;
+   assign y[16+3] = (  ~s[16+7] ^ s[16+3] ^ s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+4] = (  s[16+4] ^ ~s[16+3] ^ s[16+2] ^ s[16+1] ^ s[16+0] ) ;
+   assign y[16+5] = ((~s[16+5] ^ s[16+4] ^ ~s[16+3] ^ s[16+2] ^ s[16+1])) ;
+   assign y[16+6] = ~((s[16+6] ^ ~s[16+5] ^ s[16+4] ^ s[16+3] ^ s[16+2])) ; 
+   assign y[16+7] = (  s[16+7] ^ s[16+6] ^ s[16+5] ^ ~s[16+4] ^ s[16+3] ) ;
+
+   assign y[8+0] = ((s[8+7] ^ ~s[8+6] ^ s[8+5] ^ ~s[8+4] ^ s[8+0]) )      ;
+   assign y[8+1] = ((~s[8+7] ^ ~s[8+6] ^ ~s[8+5] ^ ~s[8+1] ^ s[8+0]) )      ;
+   assign y[8+2] = ~(  ~s[8+7] ^ s[8+6] ^ ~s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+3] = (  s[8+7] ^ ~s[8+3] ^ s[8+2] ^ s[8+1] ^ s[8+0]  )      ;
+   assign y[8+4] = (  s[8+4] ^ s[8+3] ^ s[8+2] ^ s[8+1] ^ ~s[8+0]  )      ;
+   assign y[8+5] = ((~s[8+5] ^ s[8+4] ^ ~s[8+3] ^ s[8+2] ^ s[8+1]) )      ;
+   assign y[8+6] = ((s[8+6] ^ ~s[8+5] ^ s[8+4] ^ s[8+3] ^ ~s[8+2]) )      ;
+   assign y[8+7] = (  ~s[8+7] ^ s[8+6] ^ ~s[8+5] ^ s[8+4] ^ ~s[8+3]  )      ;
+
+   assign y[0+0] = ((~s[0+7] ^ s[0+6] ^ ~s[0+5] ^ s[0+4] ^ s[0+0]))    ;
+   assign y[0+1] = ((~s[0+7] ^ s[0+6] ^ s[0+5] ^ s[0+1] ^ ~s[0+0]))   ;
+   assign y[0+2] = (  s[0+7] ^ ~s[0+6] ^ s[0+2] ^ s[0+1] ^ s[0+0] )   ;
+   assign y[0+3] = (  s[0+7] ^ s[0+3] ^ s[0+2] ^ ~s[0+1] ^ s[0+0] )  ;
+   assign y[0+4] = (  ~s[0+4] ^ s[0+3] ^ s[0+2] ^ s[0+1] ^ s[0+0] )  ;
+   assign y[0+5] = ((s[0+5] ^ s[0+4] ^ s[0+3] ^ ~s[0+2] ^ ~s[0+1]))   ;
+   assign y[0+6] = ((s[0+6] ^ ~s[0+5] ^ s[0+4] ^ ~s[0+3] ^ s[0+2]))  ;
+   assign y[0+7] = (  s[0+7] ^ s[0+6] ^ ~s[0+5] ^ s[0+4] ^ s[0+3] )  ;
+    
+   //------------------------------------------------ Affine matrix
+   // function [7:0] mat_at;
+   //    input [7:0] x;
+   //    begin
+	//  mat_at[0] = ~(x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[0]);
+	//  mat_at[1] = ~(x[7] ^ x[6] ^ x[5] ^ x[1] ^ x[0]);
+	//  mat_at[2] =   x[7] ^ x[6] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[3] =   x[7] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[4] =   x[4] ^ x[3] ^ x[2] ^ x[1] ^ x[0];
+	//  mat_at[5] = ~(x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1]);
+	//  mat_at[6] = ~(x[6] ^ x[5] ^ x[4] ^ x[3] ^ x[2]);
+	//  mat_at[7] =   x[7] ^ x[6] ^ x[5] ^ x[4] ^ x[3];
+   //    end
+   // endfunction
+endmodule // SubBytes
+
+
+
+module GF_MULINV_8_ny (x, y);
+
+   //------------------------------------------------
+   input  [7:0] x;
+   output [7:0] y;
+   
+   //------------------------------------------------
+   wire [7:0] 	xt, yt;
+   wire [3:0] 	g1, g0, g1_g0, p, pi;
+   
+   //------------------------------------------------
+   // GF(2^8) -> GF(2^2^2) transform
+   assign xt = mat_x(x);
+
+   // Multipricative inversion in GF(2^2^2)
+   assign {g1, g0} = xt;
+   assign g1_g0    = g1 ^ g0;
+
+   assign p = gf_mul4_lambda(gf_sq4(g1)) ^ gf_mul4(g1_g0, g0);
+   GF_MULINV_4 u0 (p, pi);
+   
+   assign yt[7:4]  = gf_mul4(g1, pi);
+   assign yt[3:0]  = gf_mul4(g1_g0, pi);
+   
+   // GF(2^2^2) -> GF(2^8) inverse transform
+   assign y = ~mat_xi(yt);
+	     
+   //------------------------------------------------ 
+   // Isomorphism matrix (lambda = 4'b1100, phi = 2'b10)
+   function [7:0] mat_x;
+      input [7:0] x;
+      begin
+	 mat_x[7] =  x[7]        ^ x[5];
+	 mat_x[6] =  x[7] ^ x[6]        ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[5] =  x[7]        ^ x[5]        ^ x[3] ^ x[2];
+	 mat_x[4] =  x[7]        ^ x[5]        ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[3] =  x[7] ^ x[6]                      ^ x[2] ^ x[1];
+	 mat_x[2] =  x[7]               ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_x[1] =         x[6]        ^ x[4]               ^ x[1];
+	 mat_x[0] =         x[6]                             ^ x[1] ^ x[0];
+      end
+   endfunction
+      
+   function [7:0] mat_xi;
+      input [7:0] x;
+      begin
+	 mat_xi[7] =  x[7] ^ x[6] ^ x[5]                      ^ x[1];
+	 mat_xi[6] =         x[6]                      ^ x[2];
+	 mat_xi[5] =         x[6] ^ x[5]                      ^ x[1];
+	 mat_xi[4] =         x[6] ^ x[5] ^ x[4]        ^ x[2] ^ x[1];
+	 mat_xi[3] =                x[5] ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_xi[2] =  x[7]               ^ x[4] ^ x[3] ^ x[2] ^ x[1];
+	 mat_xi[1] =                x[5] ^ x[4];
+	 mat_xi[0] =         x[6] ^ x[5] ^ x[4]        ^ x[2]        ^ x[0];
+      end
+   endfunction
+   
+   //------------------------------------------------ Square 
+   function [3:0] gf_sq4;
+      input [3:0] x;
+      begin
+	 gf_sq4[0] = x[3] ^ x[1] ^ x[0];
+	 gf_sq4[1] = x[2] ^ x[1];
+	 gf_sq4[2] = x[3] ^ x[2];
+	 gf_sq4[3] = x[3];      
+      end
+   endfunction // gf_sq4
+
+   //------------------------------------------------ Multiply
+   function [3:0] gf_mul4;
+      input [3:0] x, y;
+      begin
+	 gf_mul4[3] = x[3]&y[3] ^ x[3]&y[1] ^ x[1]&y[3] ^ 
+		      x[2]&y[3] ^ x[2]&y[1] ^ x[0]&y[3] ^
+		      x[3]&y[2] ^ x[3]&y[0] ^ x[1]&y[2];
+	 
+	 gf_mul4[2] = x[3]&y[3] ^ x[3]&y[1] ^ x[1]&y[3] ^
+		      x[2]&y[2] ^ x[2]&y[0] ^ x[0]&y[2];
+	 
+	 gf_mul4[1] = x[2]&y[3] ^ x[3]&y[2] ^ x[2]&y[2]^
+		      x[1]&y[1] ^ x[0]&y[1] ^ x[1]&y[0];
+	 
+	 gf_mul4[0] = x[3]&y[3] ^ x[2]&y[3] ^ x[3]&y[2]^
+		      x[1]&y[1] ^ x[0]&y[0];   
+      end
+   endfunction
+
+   // lambda = 4'b1100
+   function [3:0] gf_mul4_lambda;
+      input [3:0] x;
+      begin
+	 gf_mul4_lambda[3] = x[2] ^ x[0];
+	 gf_mul4_lambda[2] = x[3] ^ x[2] ^ x[1] ^ x[0];
+	 gf_mul4_lambda[1] = x[3];
+	 gf_mul4_lambda[0] = x[2];
+      end
+   endfunction
+
+endmodule // GF_MULINV_8
+
+`timescale 1 ns / 1 ps
+
+
+module SubBytes_ny_v3
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [31:0] s;
+  reg [31:0] y_reg;
+
+  GF_MULINV_8_ny
+  u3
+  (
+    .x(x[31:24]),
+    .y(s[31:24])
+  );
+
+
+  GF_MULINV_8_ny
+  u2
+  (
+    .x(x[23:16]),
+    .y(s[23:16])
+  );
+
+
+  GF_MULINV_8_ny
+  u1
+  (
+    .x(x[15:8]),
+    .y(s[15:8])
+  );
+
+
+  GF_MULINV_8_ny
+  u0
+  (
+    .x(x[7:0]),
+    .y(s[7:0])
+  );
+
+
+  always @(posedge x) begin
+    y_reg = y;
+  end
+
+  assign y[24 + 1] = (s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 1]) & s[24 + 0] | (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] | ~s[24 + 1]) & (~s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] | s[24 + 1]) & ~s[24 + 0];
+  assign y[24 + 0] = ((s[24 + 7] ^ s[24 + 6] ^ ~s[24 + 5]) & s[24 + 4] | (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5]) & ~s[24 + 4]) & s[24 + 0] | (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4]) & ~s[24 + 0];
+  assign y[24 + 2] = (~s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 2] ^ s[24 + 1] | ~s[24 + 0]) & (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 2] ^ s[24 + 1] | s[24 + 0]);
+  assign y[24 + 3] = (~s[24 + 7] ^ ~s[24 + 3] ^ ~s[24 + 2] ^ s[24 + 1] | ~s[24 + 0]) & (s[24 + 7] ^ ~s[24 + 3] ^ ~s[24 + 2] ^ s[24 + 1] | s[24 + 0]);
+  assign y[24 + 4] = (~s[24 + 4] ^ ~s[24 + 3] ^ s[24 + 2] ^ ~s[24 + 1] | ~s[24 + 0]) & ((s[24 + 4] ^ ~s[24 + 3] ^ s[24 + 2]) & s[24 + 1] | (~s[24 + 4] ^ s[24 + 3] ^ ~s[24 + 2]) & ~s[24 + 1] | s[24 + 0]);
+  assign y[24 + 5] = ((s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3]) & s[24 + 2] | (~s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3]) & ~s[24 + 2]) & s[24 + 1] | (~s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3] | ~s[24 + 2]) & (~s[24 + 5] ^ ~s[24 + 4] ^ ~s[24 + 3] | s[24 + 2]) & ~s[24 + 1];
+  assign y[24 + 6] = ((~s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & s[24 + 3] | (s[24 + 6] ^ ~s[24 + 5] ^ ~s[24 + 4]) & ~s[24 + 3]) & s[24 + 2] | (~s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 4] ^ ~s[24 + 3]) & ~s[24 + 2];
+  assign y[24 + 7] = (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4] | ~s[24 + 3]) & (~s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] ^ ~s[24 + 4] | s[24 + 3]);
+  assign y[16 + 0] = (~s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4]) & s[16 + 0] | (s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] | ~s[16 + 4]) & (~s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] | s[16 + 4]) & ~s[16 + 0];
+  assign y[16 + 1] = ((~s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5]) & s[16 + 1] | (~s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5]) & ~s[16 + 1]) & s[16 + 0] | (~s[16 + 7] ^ s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 1]) & ~s[16 + 0];
+  assign y[16 + 2] = (s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 2] ^ s[16 + 1] | ~s[16 + 0]) & ((~s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 2]) & s[16 + 1] | (~s[16 + 7] ^ s[16 + 6] ^ ~s[16 + 2]) & ~s[16 + 1] | s[16 + 0]);
+  assign y[16 + 3] = (~s[16 + 7] ^ ~s[16 + 3] ^ ~s[16 + 2] ^ s[16 + 1] | ~s[16 + 0]) & (~s[16 + 7] ^ s[16 + 3] ^ ~s[16 + 2] ^ s[16 + 1] | s[16 + 0]);
+  assign y[16 + 4] = (~s[16 + 4] ^ ~s[16 + 3] ^ s[16 + 2] ^ ~s[16 + 1] | ~s[16 + 0]) & (~s[16 + 4] ^ ~s[16 + 3] ^ s[16 + 2] ^ s[16 + 1] | s[16 + 0]);
+  assign y[16 + 5] = (~s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3] ^ s[16 + 2]) & s[16 + 1] | (~s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3] ^ ~s[16 + 2]) & ~s[16 + 1];
+  assign y[16 + 6] = (~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] ^ ~s[16 + 3]) & s[16 + 2] | (~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3]) & ~s[16 + 2];
+  assign y[16 + 7] = ((s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] | ~s[16 + 4]) & (s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] | s[16 + 4]) | ~s[16 + 3]) & (~s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] | s[16 + 3]);
+  assign y[8 + 0] = (~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4]) & s[8 + 0] | (s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4]) & ~s[8 + 0];
+  assign y[8 + 1] = ~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] ^ s[8 + 1] ^ s[8 + 0];
+  assign y[8 + 2] = (~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 2] ^ s[8 + 1] | ~s[8 + 0]) & ((s[8 + 7] ^ ~s[8 + 6] ^ s[8 + 2]) & s[8 + 1] | (~s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 2]) & ~s[8 + 1] | s[8 + 0]);
+  assign y[8 + 3] = ((~s[8 + 7] ^ ~s[8 + 3] ^ s[8 + 2] | ~s[8 + 1]) & (~s[8 + 7] ^ s[8 + 3] ^ s[8 + 2] | s[8 + 1]) | ~s[8 + 0]) & (~s[8 + 7] ^ s[8 + 3] ^ ~s[8 + 2] ^ s[8 + 1] | s[8 + 0]);
+  assign y[8 + 4] = (s[8 + 4] ^ ~s[8 + 3] ^ s[8 + 2] ^ s[8 + 1] | ~s[8 + 0]) & ((~s[8 + 4] ^ s[8 + 3] ^ s[8 + 2]) & s[8 + 1] | (~s[8 + 4] ^ ~s[8 + 3] ^ s[8 + 2]) & ~s[8 + 1] | s[8 + 0]);
+  assign y[8 + 5] = ~s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3] ^ s[8 + 2] ^ s[8 + 1];
+  assign y[8 + 6] = (~s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3]) & s[8 + 2] | (~s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] | ~s[8 + 3]) & (~s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4] | s[8 + 3]) & ~s[8 + 2];
+  assign y[8 + 7] = ((s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] | ~s[8 + 4]) & (~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] | s[8 + 4]) | ~s[8 + 3]) & (~s[8 + 7] ^ ~s[8 + 6] ^ s[8 + 5] ^ s[8 + 4] | s[8 + 3]);
+  assign y[0 + 0] = ((~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5]) & s[0 + 4] | (~s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 5]) & ~s[0 + 4]) & s[0 + 0] | (~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5] ^ s[0 + 4]) & ~s[0 + 0];
+  assign y[0 + 1] = ((~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5]) & s[0 + 1] | (~s[0 + 7] ^ s[0 + 6] ^ ~s[0 + 5]) & ~s[0 + 1]) & s[0 + 0] | (s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 1]) & ~s[0 + 0];
+  assign y[0 + 2] = ~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 2] ^ ~s[0 + 1] ^ s[0 + 0];
+  assign y[0 + 3] = ((~s[0 + 7] ^ ~s[0 + 3] ^ s[0 + 2] | ~s[0 + 1]) & (s[0 + 7] ^ ~s[0 + 3] ^ s[0 + 2] | s[0 + 1]) | ~s[0 + 0]) & ((~s[0 + 7] ^ ~s[0 + 3] ^ ~s[0 + 2]) & s[0 + 1] | (~s[0 + 7] ^ s[0 + 3] ^ ~s[0 + 2]) & ~s[0 + 1] | s[0 + 0]);
+  assign y[0 + 4] = (~s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2] ^ s[0 + 1] | ~s[0 + 0]) & ((s[0 + 4] ^ s[0 + 3] ^ ~s[0 + 2]) & s[0 + 1] | (~s[0 + 4] ^ ~s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1] | s[0 + 0]);
+  assign y[0 + 5] = (~s[0 + 5] ^ ~s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2]) & s[0 + 1] | (~s[0 + 5] ^ ~s[0 + 4] ^ ~s[0 + 3] ^ s[0 + 2]) & ~s[0 + 1];
+  assign y[0 + 6] = (s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3]) & s[0 + 2] | (s[0 + 6] ^ s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3]) & ~s[0 + 2];
+  assign y[0 + 7] = ~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3];
+
+endmodule
+
+
+`timescale 1 ns / 1 ps
+
+
+module SubBytes_ny_v2
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [31:0] s;
+  reg [31:0] y_reg;
+
+  GF_MULINV_8
+  u3
+  (
+    .x(x[31:24]),
+    .y(s[31:24])
+  );
+
+
+  GF_MULINV_8
+  u2
+  (
+    .x(x[23:16]),
+    .y(s[23:16])
+  );
+
+
+  GF_MULINV_8
+  u1
+  (
+    .x(x[15:8]),
+    .y(s[15:8])
+  );
+
+
+  GF_MULINV_8
+  u0
+  (
+    .x(x[7:0]),
+    .y(s[7:0])
+  );
+
+
+  always @(posedge x) begin
+    y_reg = y;
+  end
+
+  assign y[24 + 1] = (s[24 + 7] ^ s[24 + 6] ^ ~s[24 + 5] ^ ~s[24 + 1] | s[24 + 0]) & (s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] ^ ~s[24 + 1] | ~s[24 + 0]);
+  assign y[24 + 0] = (~s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4] | s[24 + 0]) & (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4] | ~s[24 + 0]);
+  assign y[24 + 2] = (s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 2] ^ s[24 + 1] | s[24 + 0]) & (s[24 + 7] ^ s[24 + 6] ^ s[24 + 2] ^ s[24 + 1] | ~s[24 + 0]);
+  assign y[24 + 3] = s[24 + 7] ^ s[24 + 3] ^ s[24 + 2] ^ ~s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 4] = s[24 + 4] ^ ~s[24 + 3] ^ s[24 + 2] ^ s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 5] = (s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3] ^ s[24 + 2] | ~s[24 + 1]) & (~s[24 + 5] ^ s[24 + 4] ^ s[24 + 3] ^ ~s[24 + 2] | s[24 + 1]);
+  assign y[24 + 6] = (s[24 + 6] ^ s[24 + 5] ^ s[24 + 4] ^ ~s[24 + 3] | ~s[24 + 2]) & (~s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3] | s[24 + 2]);
+  assign y[24 + 7] = ~s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ s[24 + 4] ^ s[24 + 3];
+  assign y[16 + 0] = (s[16 + 7] ^ s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] | s[16 + 0]) & (s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] | ~s[16 + 0]);
+  assign y[16 + 1] = s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 2] = s[16 + 7] ^ s[16 + 6] ^ s[16 + 2] ^ ~s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 3] = ~s[16 + 7] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 4] = s[16 + 4] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1] ^ ~s[16 + 0];
+  assign y[16 + 5] = ~s[16 + 5] ^ s[16 + 4] ^ s[16 + 3] ^ s[16 + 2] ^ ~s[16 + 1];
+  assign y[16 + 6] = s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] ^ s[16 + 3] ^ s[16 + 2];
+  assign y[16 + 7] = (s[16 + 7] ^ s[16 + 6] ^ ~s[16 + 5] ^ s[16 + 4] | s[16 + 3]) & (s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] | ~s[16 + 3]);
+  assign y[8 + 0] = (s[8 + 7] ^ ~s[8 + 6] ^ s[8 + 5] ^ s[8 + 4] | ~s[8 + 0]) & (s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] ^ s[8 + 4] | s[8 + 0]);
+  assign y[8 + 1] = s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 1] ^ s[8 + 0];
+  assign y[8 + 2] = (s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 2] ^ ~s[8 + 1] | ~s[8 + 0]) & (s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 2] ^ s[8 + 1] | s[8 + 0]);
+  assign y[8 + 3] = s[8 + 7] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1] ^ ~s[8 + 0];
+  assign y[8 + 4] = s[8 + 4] ^ s[8 + 3] ^ ~s[8 + 2] ^ s[8 + 1] ^ s[8 + 0];
+  assign y[8 + 5] = (s[8 + 5] ^ s[8 + 4] ^ s[8 + 3] ^ ~s[8 + 2] | ~s[8 + 1]) & (s[8 + 5] ^ s[8 + 4] ^ ~s[8 + 3] ^ ~s[8 + 2] | s[8 + 1]);
+  assign y[8 + 6] = (s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] ^ s[8 + 3] | ~s[8 + 2]) & (s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3] | s[8 + 2]);
+  assign y[8 + 7] = (~s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4] | s[8 + 3]) & (s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 4] | ~s[8 + 3]);
+  assign y[0 + 0] = (~s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] | ~s[0 + 0]) & (s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] | s[0 + 0]);
+  assign y[0 + 1] = s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ ~s[0 + 1] ^ ~s[0 + 0];
+  assign y[0 + 2] = s[0 + 7] ^ s[0 + 6] ^ s[0 + 2] ^ s[0 + 1] ^ ~s[0 + 0];
+  assign y[0 + 3] = (s[0 + 7] ^ s[0 + 3] ^ ~s[0 + 2] ^ s[0 + 1] | s[0 + 0]) & (s[0 + 7] ^ ~s[0 + 3] ^ s[0 + 2] ^ ~s[0 + 1] | ~s[0 + 0]);
+  assign y[0 + 4] = s[0 + 4] ^ ~s[0 + 3] ^ s[0 + 2] ^ s[0 + 1] ^ s[0 + 0];
+  assign y[0 + 5] = (s[0 + 5] ^ s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2] | s[0 + 1]) & (s[0 + 5] ^ s[0 + 4] ^ s[0 + 3] ^ ~s[0 + 2] | ~s[0 + 1]);
+  assign y[0 + 6] = (s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ s[0 + 3] | s[0 + 2]) & (~s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3] | ~s[0 + 2]);
+  assign y[0 + 7] = (~s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] | s[0 + 3]) & (s[0 + 7] ^ s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] | ~s[0 + 3]);
+
+endmodule
+
+
+`timescale 1 ns / 1 ps
+
+
+module SubBytes_ny_2_v1
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [31:0] s;
+  reg [31:0] y_reg;
+
+  GF_MULINV_8
+  u3
+  (
+    .x(x[31:24]),
+    .y(s[31:24])
+  );
+
+
+  GF_MULINV_8
+  u2
+  (
+    .x(x[23:16]),
+    .y(s[23:16])
+  );
+
+
+  GF_MULINV_8
+  u1
+  (
+    .x(x[15:8]),
+    .y(s[15:8])
+  );
+
+
+  GF_MULINV_8
+  u0
+  (
+    .x(x[7:0]),
+    .y(s[7:0])
+  );
+
+  assign y[24 + 1] = ~s[24 + 7] ^ s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 0] = (s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & s[24 + 0] | (~s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 5] ^ s[24 + 4]) & ~s[24 + 0];
+  assign y[24 + 2] = s[24 + 7] ^ s[24 + 6] ^ s[24 + 2] ^ ~s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 3] = ~s[24 + 7] ^ s[24 + 3] ^ s[24 + 2] ^ s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 4] = ~s[24 + 4] ^ s[24 + 3] ^ s[24 + 2] ^ s[24 + 1] ^ s[24 + 0];
+  assign y[24 + 5] = (~s[24 + 5] ^ ~s[24 + 4] ^ ~s[24 + 3] ^ ~s[24 + 2]) & ~s[24 + 1] | (~s[24 + 5] ^ s[24 + 4] ^ ~s[24 + 3] ^ ~s[24 + 2]) & s[24 + 1];
+  assign y[24 + 6] = (s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 4] ^ s[24 + 3]) & s[24 + 2] | (s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 4] ^ ~s[24 + 3]) & ~s[24 + 2];
+  assign y[24 + 7] = s[24 + 7] ^ s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 4] ^ s[24 + 3];
+  assign y[16 + 0] = (s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] ^ s[16 + 4] | s[16 + 0]) & (s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] ^ s[16 + 4] | ~s[16 + 0]);
+  assign y[16 + 1] = ~s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] ^ s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 2] = (s[16 + 7] ^ s[16 + 6] ^ s[16 + 2] ^ ~s[16 + 1]) & ~s[16 + 0] | (s[16 + 7] ^ s[16 + 6] ^ s[16 + 2] ^ s[16 + 1]) & s[16 + 0];
+  assign y[16 + 3] = s[16 + 7] ^ s[16 + 3] ^ ~s[16 + 2] ^ s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 4] = (s[16 + 4] ^ s[16 + 3] ^ s[16 + 2] ^ s[16 + 1]) & s[16 + 0] | (s[16 + 4] ^ s[16 + 3] ^ ~s[16 + 2] ^ s[16 + 1]) & ~s[16 + 0];
+  assign y[16 + 5] = s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3] ^ ~s[16 + 2] ^ s[16 + 1];
+  assign y[16 + 6] = (s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3] | s[16 + 2]) & (s[16 + 6] ^ s[16 + 5] ^ ~s[16 + 4] ^ s[16 + 3] | ~s[16 + 2]);
+  assign y[16 + 7] = (s[16 + 7] ^ s[16 + 6] ^ s[16 + 5] ^ s[16 + 4]) & s[16 + 3] | (s[16 + 7] ^ s[16 + 6] ^ ~s[16 + 5] ^ s[16 + 4]) & ~s[16 + 3];
+  assign y[8 + 0] = s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 5] ^ s[8 + 4] ^ ~s[8 + 0];
+  assign y[8 + 1] = (s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ s[8 + 1]) & ~s[8 + 0] | (s[8 + 7] ^ s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 1]) & s[8 + 0];
+  assign y[8 + 2] = s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 2] ^ s[8 + 1] ^ s[8 + 0];
+  assign y[8 + 3] = (~s[8 + 7] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1]) & ~s[8 + 0] | (~s[8 + 7] ^ s[8 + 3] ^ s[8 + 2] ^ ~s[8 + 1]) & s[8 + 0];
+  assign y[8 + 4] = (s[8 + 4] ^ s[8 + 3] ^ ~s[8 + 2] ^ s[8 + 1]) & ~s[8 + 0] | (s[8 + 4] ^ s[8 + 3] ^ ~s[8 + 2] ^ ~s[8 + 1]) & s[8 + 0];
+  assign y[8 + 5] = s[8 + 5] ^ s[8 + 4] ^ s[8 + 3] ^ s[8 + 2] ^ s[8 + 1];
+  assign y[8 + 6] = (s[8 + 6] ^ s[8 + 5] ^ s[8 + 4] ^ s[8 + 3] | s[8 + 2]) & (s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] ^ s[8 + 3] | ~s[8 + 2]);
+  assign y[8 + 7] = s[8 + 7] ^ s[8 + 6] ^ ~s[8 + 5] ^ s[8 + 4] ^ s[8 + 3];
+  assign y[0 + 0] = s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5] ^ s[0 + 4] ^ s[0 + 0];
+  assign y[0 + 1] = s[0 + 7] ^ s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 1] ^ s[0 + 0];
+  assign y[0 + 2] = (s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 2] ^ s[0 + 1]) & ~s[0 + 0] | (s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 2] ^ ~s[0 + 1]) & s[0 + 0];
+  assign y[0 + 3] = (s[0 + 7] ^ ~s[0 + 3] ^ s[0 + 2] ^ s[0 + 1]) & ~s[0 + 0] | (s[0 + 7] ^ ~s[0 + 3] ^ s[0 + 2] ^ ~s[0 + 1]) & s[0 + 0];
+  assign y[0 + 4] = s[0 + 4] ^ s[0 + 3] ^ s[0 + 2] ^ ~s[0 + 1] ^ s[0 + 0];
+  assign y[0 + 5] = (s[0 + 5] ^ s[0 + 4] ^ s[0 + 3] ^ s[0 + 2] | s[0 + 1]) & (s[0 + 5] ^ ~s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2] | ~s[0 + 1]);
+  assign y[0 + 6] = (s[0 + 6] ^ ~s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3] | s[0 + 2]) & (s[0 + 6] ^ s[0 + 5] ^ ~s[0 + 4] ^ s[0 + 3] | ~s[0 + 2]);
+  assign y[0 + 7] = s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ s[0 + 3];
+
+endmodule
+
+
+`timescale 1 ns / 1 ps
+
+
+module SubBytes_ny_3_v1
+(
+  x,
+  y
+);
+
+  input [31:0] x;
+  output [31:0] y;
+  wire [31:0] s;
+  reg [31:0] y_reg;
+
+  GF_MULINV_8_ny
+  u3
+  (
+    .x(x[31:24]),
+    .y(s[31:24])
+  );
+
+
+  GF_MULINV_8_ny
+  u2
+  (
+    .x(x[23:16]),
+    .y(s[23:16])
+  );
+
+
+  GF_MULINV_8_ny
+  u1
+  (
+    .x(x[15:8]),
+    .y(s[15:8])
+  );
+
+
+  GF_MULINV_8_ny
+  u0
+  (
+    .x(x[7:0]),
+    .y(s[7:0])
+  );
+
+  assign y[24 + 1] = (~s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 1]) & s[24 + 0] | (s[24 + 7] ^ s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 1]) & ~s[24 + 0];
+  assign y[24 + 0] = ~s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] ^ s[24 + 4] ^ s[24 + 0];
+  assign y[24 + 2] = s[24 + 7] ^ ~s[24 + 6] ^ s[24 + 2] ^ s[24 + 1] ^ ~s[24 + 0];
+  assign y[24 + 3] = (~s[24 + 7] ^ s[24 + 3] ^ ~s[24 + 2] ^ ~s[24 + 1]) & s[24 + 0] | (~s[24 + 7] ^ s[24 + 3] ^ ~s[24 + 2] ^ s[24 + 1]) & ~s[24 + 0];
+  assign y[24 + 4] = ~s[24 + 4] ^ ~s[24 + 3] ^ s[24 + 2] ^ ~s[24 + 1] ^ ~s[24 + 0];
+  assign y[24 + 5] = ~s[24 + 5] ^ ~s[24 + 4] ^ s[24 + 3] ^ s[24 + 2] ^ ~s[24 + 1];
+  assign y[24 + 6] = (~s[24 + 6] ^ s[24 + 5] ^ ~s[24 + 4] ^ ~s[24 + 3]) & ~s[24 + 2] | (~s[24 + 6] ^ s[24 + 5] ^ s[24 + 4] ^ ~s[24 + 3]) & s[24 + 2];
+  assign y[24 + 7] = s[24 + 7] ^ ~s[24 + 6] ^ ~s[24 + 5] ^ ~s[24 + 4] ^ ~s[24 + 3];
+  assign y[16 + 0] = (~s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 5] ^ ~s[16 + 4] | s[16 + 0]) & (~s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] | ~s[16 + 0]);
+  assign y[16 + 1] = ~s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] ^ s[16 + 1] ^ s[16 + 0];
+  assign y[16 + 2] = ~s[16 + 7] ^ ~s[16 + 6] ^ s[16 + 2] ^ ~s[16 + 1] ^ ~s[16 + 0];
+  assign y[16 + 3] = s[16 + 7] ^ ~s[16 + 3] ^ ~s[16 + 2] ^ ~s[16 + 1] ^ ~s[16 + 0];
+  assign y[16 + 4] = ~s[16 + 4] ^ ~s[16 + 3] ^ s[16 + 2] ^ ~s[16 + 1] ^ ~s[16 + 0];
+  assign y[16 + 5] = ~s[16 + 5] ^ ~s[16 + 4] ^ ~s[16 + 3] ^ ~s[16 + 2] ^ ~s[16 + 1];
+  assign y[16 + 6] = (~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] ^ ~s[16 + 3] | ~s[16 + 2]) & (~s[16 + 6] ^ ~s[16 + 5] ^ s[16 + 4] ^ ~s[16 + 3] | s[16 + 2]);
+  assign y[16 + 7] = s[16 + 7] ^ ~s[16 + 6] ^ ~s[16 + 5] ^ ~s[16 + 4] ^ ~s[16 + 3];
+  assign y[8 + 0] = ~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 5] ^ s[8 + 4] ^ s[8 + 0];
+  assign y[8 + 1] = ~s[8 + 7] ^ ~s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 1] ^ s[8 + 0];
+  assign y[8 + 2] = (s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 2] ^ ~s[8 + 1]) & s[8 + 0] | (~s[8 + 7] ^ ~s[8 + 6] ^ ~s[8 + 2] ^ ~s[8 + 1]) & ~s[8 + 0];
+  assign y[8 + 3] = (~s[8 + 7] ^ ~s[8 + 3] ^ s[8 + 2] ^ ~s[8 + 1]) & s[8 + 0] | (~s[8 + 7] ^ ~s[8 + 3] ^ s[8 + 2] ^ s[8 + 1]) & ~s[8 + 0];
+  assign y[8 + 4] = (~s[8 + 4] ^ ~s[8 + 3] ^ ~s[8 + 2] ^ ~s[8 + 1]) & ~s[8 + 0] | (~s[8 + 4] ^ ~s[8 + 3] ^ ~s[8 + 2] ^ s[8 + 1]) & s[8 + 0];
+  assign y[8 + 5] = (~s[8 + 5] ^ s[8 + 4] ^ ~s[8 + 3] ^ s[8 + 2]) & s[8 + 1] | (~s[8 + 5] ^ s[8 + 4] ^ ~s[8 + 3] ^ ~s[8 + 2]) & ~s[8 + 1];
+  assign y[8 + 6] = (~s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3]) & ~s[8 + 2] | (~s[8 + 6] ^ ~s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3]) & s[8 + 2];
+  assign y[8 + 7] = ~s[8 + 7] ^ ~s[8 + 6] ^ s[8 + 5] ^ ~s[8 + 4] ^ ~s[8 + 3];
+  assign y[0 + 0] = ~s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 5] ^ s[0 + 4] ^ ~s[0 + 0];
+  assign y[0 + 1] = ~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 5] ^ s[0 + 1] ^ s[0 + 0];
+  assign y[0 + 2] = (~s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 2] ^ ~s[0 + 1]) & s[0 + 0] | (~s[0 + 7] ^ ~s[0 + 6] ^ ~s[0 + 2] ^ ~s[0 + 1]) & ~s[0 + 0];
+  assign y[0 + 3] = (~s[0 + 7] ^ s[0 + 3] ^ ~s[0 + 2] ^ ~s[0 + 1]) & s[0 + 0] | (~s[0 + 7] ^ s[0 + 3] ^ ~s[0 + 2] ^ s[0 + 1]) & ~s[0 + 0];
+  assign y[0 + 4] = (~s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2] ^ ~s[0 + 1]) & ~s[0 + 0] | (s[0 + 4] ^ ~s[0 + 3] ^ ~s[0 + 2] ^ ~s[0 + 1]) & s[0 + 0];
+  assign y[0 + 5] = ~s[0 + 5] ^ s[0 + 4] ^ ~s[0 + 3] ^ s[0 + 2] ^ ~s[0 + 1];
+  assign y[0 + 6] = ~s[0 + 6] ^ ~s[0 + 5] ^ s[0 + 4] ^ ~s[0 + 3] ^ s[0 + 2];
+  assign y[0 + 7] = ~s[0 + 7] ^ ~s[0 + 6] ^ s[0 + 5] ^ ~s[0 + 4] ^ ~s[0 + 3];
+
+endmodule
+
+

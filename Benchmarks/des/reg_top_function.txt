@@ -1,0 +1,3 @@
+init_perm_res_reg_149
+permuted_choice_1_reg_172
+phi_ln74_reg_183
