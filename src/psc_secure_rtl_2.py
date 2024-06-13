@@ -1268,7 +1268,16 @@ def main(file_name):
             print(level,reg_name)
             reg_name = reg_name.strip()
             pscSecureRtl = PSCSecureRtl(ast,reg_name,reg_decl,width_dict,mapping,decl_stat_dict,fanout_map)
-            ast = pscSecureRtl.visit(ast)
+            #ast = pscSecureRtl.visit(ast)
+			
+			''' 
+			this will make code faster,if this is not working 
+			then uncomment the previous line and comment below 2 lines.
+			'''
+			if reg_name in mapping.keys():
+				mapping[reg_name] = pscSecureRtl.visit_AnyAssignment(mapping[reg_name])
+
+
             update_module_definition(pscSecureRtl = pscSecureRtl,reg_name = reg_name)
             
         
@@ -1331,5 +1340,5 @@ def main(file_name):
 
 
 if __name__ == '__main__':
-    file_name = 'standard_test_files/aes/comar/comar.v'
+    file_name = 'standard_test_files/aes/aes_sbox.v'
     main(file_name=file_name)
