@@ -1,0 +1,12 @@
+Y1
+Y0
+z58_assgn58
+z60_assgn60
+T3_reg
+z55_assgn55
+z121_assgn1210
+T1_reg
+L5_reg
+Q3_reg
+T0_reg
+L2_reg
